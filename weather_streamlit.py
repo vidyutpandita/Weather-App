@@ -4,6 +4,7 @@ Weather dashboard — Streamlit UI.
 Uses Open-Meteo API (free, no key required).
 """
 
+import random
 import streamlit as st
 import requests
 from datetime import datetime
@@ -83,6 +84,131 @@ def search_cities(query: str):
         return [(location_label(loc), loc) for loc in results]
     except Exception:
         return []
+
+
+def get_weather_animation_html(code: int, is_day: bool) -> str:
+    """Return a fixed-position animated weather overlay (pointer-events:none)."""
+    rng = random.Random(code * 31 + (0 if is_day else 1000))
+
+    if code in (95, 96, 99):
+        anim = "thunder"
+    elif code in (71, 73, 75, 77, 85, 86):
+        anim = "snow"
+    elif code in (51, 53, 55, 61, 63, 65, 80, 81, 82):
+        anim = "rain"
+    elif code in (45, 48):
+        anim = "fog"
+    elif code == 3:
+        anim = "overcast"
+    elif code in (1, 2):
+        anim = "partly_cloudy"
+    else:
+        anim = "clear_day" if is_day else "clear_night"
+
+    keyframes = """<style>
+@keyframes wt-rain    { from{transform:translateY(-30px) translateX(0)}   to{transform:translateY(105vh) translateX(-15px)} }
+@keyframes wt-snow    { 0%{transform:translateY(-20px) translateX(0);opacity:.9} 25%{transform:translateY(25vh) translateX(20px)} 75%{transform:translateY(75vh) translateX(-15px)} 100%{transform:translateY(105vh) translateX(5px);opacity:.3} }
+@keyframes wt-star    { 0%,100%{opacity:.15;transform:scale(.8)} 50%{opacity:.9;transform:scale(1.2)} }
+@keyframes wt-sun-glow{ 0%,100%{box-shadow:0 0 50px 25px rgba(255,200,50,.3),0 0 100px 50px rgba(255,140,0,.12)} 50%{box-shadow:0 0 70px 40px rgba(255,200,50,.45),0 0 140px 70px rgba(255,140,0,.2)} }
+@keyframes wt-ray-cw  { from{transform:rotate(0deg)}   to{transform:rotate(360deg)} }
+@keyframes wt-ray-ccw { from{transform:rotate(0deg)}   to{transform:rotate(-360deg)} }
+@keyframes wt-cloud   { from{transform:translateX(-220px)} to{transform:translateX(110vw)} }
+@keyframes wt-fog     { 0%{transform:translateX(-30%);opacity:0} 15%{opacity:1} 85%{opacity:1} 100%{transform:translateX(110%);opacity:0} }
+@keyframes wt-flash   { 0%,100%{opacity:0} 5%{opacity:.55} 6%{opacity:0} 7%{opacity:.3} 8%{opacity:0} }
+</style>"""
+
+    wrap = '<div style="position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:9999;overflow:hidden;">'
+    parts = []
+
+    if anim in ("rain", "thunder"):
+        count = 55 if code in (65, 82) else 30
+        for _ in range(count):
+            left = rng.randint(0, 100)
+            h    = rng.randint(12, 28)
+            d    = round(rng.uniform(0, 3), 2)
+            dur  = round(rng.uniform(0.55, 1.3), 2)
+            op   = round(rng.uniform(0.35, 0.65), 2)
+            parts.append(
+                f'<div style="position:absolute;left:{left}%;top:0;width:1.5px;height:{h}px;'
+                f'background:linear-gradient(transparent,rgba(100,181,246,{op}));'
+                f'animation:wt-rain {dur}s {d}s linear infinite;border-radius:1px;"></div>'
+            )
+        if anim == "thunder":
+            parts.append(
+                '<div style="position:absolute;inset:0;background:rgba(180,210,255,.18);'
+                'animation:wt-flash 7s .5s ease-in-out infinite;"></div>'
+            )
+
+    elif anim == "snow":
+        for _ in range(38):
+            left = rng.randint(0, 100)
+            size = round(rng.uniform(0.7, 1.7), 1)
+            d    = round(rng.uniform(0, 12), 2)
+            dur  = round(rng.uniform(7, 16), 2)
+            op   = round(rng.uniform(0.45, 0.8), 2)
+            ch   = rng.choice(["❄", "❅", "❆", "·", "•"])
+            parts.append(
+                f'<div style="position:absolute;left:{left}%;top:-24px;font-size:{size}rem;'
+                f'color:rgba(255,255,255,{op});'
+                f'animation:wt-snow {dur}s {d}s linear infinite;'
+                f'user-select:none;">{ch}</div>'
+            )
+
+    elif anim == "clear_day":
+        parts += [
+            '<div style="position:absolute;top:30px;right:50px;width:90px;height:90px;'
+            'background:radial-gradient(circle,rgba(255,225,80,.95),rgba(255,160,0,.75));'
+            'border-radius:50%;animation:wt-sun-glow 4s ease-in-out infinite;"></div>',
+            '<div style="position:absolute;top:10px;right:30px;width:130px;height:130px;'
+            'border:3px dashed rgba(255,210,60,.3);border-radius:50%;'
+            'animation:wt-ray-cw 15s linear infinite;"></div>',
+            '<div style="position:absolute;top:-10px;right:10px;width:170px;height:170px;'
+            'border:2px dashed rgba(255,200,50,.12);border-radius:50%;'
+            'animation:wt-ray-ccw 25s linear infinite;"></div>',
+        ]
+
+    elif anim == "clear_night":
+        for _ in range(60):
+            top  = rng.randint(2, 65)
+            left = rng.randint(0, 100)
+            size = round(rng.uniform(0.18, 0.45), 2)
+            d    = round(rng.uniform(0, 6), 2)
+            dur  = round(rng.uniform(2, 5), 2)
+            parts.append(
+                f'<div style="position:absolute;top:{top}%;left:{left}%;'
+                f'width:{size}rem;height:{size}rem;background:white;border-radius:50%;'
+                f'animation:wt-star {dur}s {d}s ease-in-out infinite;"></div>'
+            )
+
+    elif anim in ("partly_cloudy", "overcast"):
+        count = 3 if anim == "partly_cloudy" else 6
+        op    = 0.10 if anim == "partly_cloudy" else 0.18
+        for _ in range(count):
+            top = rng.randint(3, 40)
+            w   = rng.randint(120, 220)
+            d   = rng.randint(0, 20)
+            dur = rng.randint(30, 60)
+            parts.append(
+                f'<div style="position:absolute;top:{top}%;left:-{w}px;'
+                f'width:{w}px;height:{w // 2}px;'
+                f'background:rgba(200,220,255,{op});border-radius:50%;filter:blur(12px);'
+                f'animation:wt-cloud {dur}s {d}s linear infinite;"></div>'
+            )
+
+    elif anim == "fog":
+        for _ in range(6):
+            top = rng.randint(5, 85)
+            h   = rng.randint(50, 120)
+            d   = rng.randint(0, 25)
+            dur = rng.randint(18, 35)
+            op  = round(rng.uniform(0.05, 0.12), 2)
+            parts.append(
+                f'<div style="position:absolute;top:{top}%;left:0;width:100%;height:{h}px;'
+                f'background:rgba(200,220,240,{op});filter:blur(18px);'
+                f'animation:wt-fog {dur}s {d}s linear infinite;"></div>'
+            )
+
+    return keyframes + wrap + "".join(parts) + "</div>"
 
 
 @st.cache_data(ttl=600)
@@ -202,6 +328,9 @@ wind_dir       = wind_dir_label(cur["wind_direction_10m"])
 dt             = datetime.fromisoformat(cur["time"])
 day_night      = "☀ Day" if cur["is_day"] else "☾ Night"
 time_str       = dt.strftime("%A, %B %-d  •  %-I:%M %p")
+
+# ── Weather animation overlay ──────────────────────────────────────────────
+st.markdown(get_weather_animation_html(code, bool(cur["is_day"])), unsafe_allow_html=True)
 
 
 # ── Header ────────────────────────────────────────────────────────────────
